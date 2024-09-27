@@ -12,6 +12,7 @@ categories = ["asynchronous", "rust-patterns"]
 
 [dependencies]
 futures = "0.3.28"
+ordered-stream = { git = "https://github.com/formelio/ordered-stream.git", branch = "master" }
 pin-project = "1.1.3"
 
 [dev-dependencies]

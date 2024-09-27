@@ -57,6 +57,7 @@ use futures::{
     stream::{Fuse, FusedStream},
     Stream, StreamExt as _,
 };
+use ordered_stream::{MaybeBorrowed, OrderedStream};
 use pin_project::pin_project;
 use std::{
     collections::VecDeque,
@@ -417,5 +418,43 @@ impl<T: Clone> Buffer<T> {
         }
 
         self.buffer_start_offset += entries_to_remove;
+    }
+}
+
+impl<'a, S: Stream> OrderedStream for Forked<S>
+where
+    S: OrderedStream + Unpin,
+    S::Item: Clone,
+    S::Ordering: Clone,
+{
+    type Ordering = S::Ordering;
+
+    type Data = S::Data;
+
+    fn poll_next_before(
+        self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        before: Option<&Self::Ordering>,
+    ) -> Poll<ordered_stream::PollResult<Self::Ordering, Self::Data>> {
+        let this = Pin::get_mut(self);
+        let inner = &mut this.inner.lock().unwrap().source;
+
+        Pin::new(inner.get_mut()).poll_next_before(cx, before)
+    }
+
+    fn position_hint(&self) -> Option<ordered_stream::MaybeBorrowed<'_, Self::Ordering>> {
+        let inner = self.inner.lock().unwrap();
+
+        match inner.source.get_ref().position_hint() {
+            Some(MaybeBorrowed::Owned(o)) => Some(MaybeBorrowed::Owned(o.clone())),
+            Some(MaybeBorrowed::Borrowed(o)) => Some(MaybeBorrowed::Owned(o.clone())),
+            None => None,
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let inner = self.inner.lock().unwrap();
+
+        OrderedStream::size_hint(inner.source.get_ref())
     }
 }
